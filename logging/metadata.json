@@ -1,6 +1,6 @@
 {
-  "run_id": "run_20260805_171657",
-  "generated_at": "2026-08-05T17:17:36",
+  "run_id": "run_20260805_173129",
+  "generated_at": "2026-08-05T17:32:05",
   "model": {
     "name": "gpt-4o-mini",
     "provider": "openai",
@@ -20,7 +20,7 @@
     ]
   },
   "runtime": {
-    "elapsed_s": 39.03,
+    "elapsed_s": 35.43,
     "workers": 6,
     "cases": 50,
     "outputs_written": 50,
@@ -79,6 +79,7 @@
     "verifier_agent": {
       "role": "Gate the incoming request, then validate schema, caps, nulls and evidence IDs",
       "scopes": [
+        "customers",
         "items",
         "orders",
         "payments",
@@ -108,8 +109,8 @@
     "calls": 150,
     "failed_calls": 0,
     "prompt_tokens": 78381,
-    "completion_tokens": 5764,
-    "total_tokens": 84145
+    "completion_tokens": 5790,
+    "total_tokens": 84171
   },
   "results": {
     "rejected_requests": [],
@@ -172,8 +173,8 @@
       "handoff": 450,
       "report": 450,
       "llm_call": 150,
-      "case_end": 50,
       "critic_findings": 36,
+      "case_end": 50,
       "run_end": 1
     }
   }

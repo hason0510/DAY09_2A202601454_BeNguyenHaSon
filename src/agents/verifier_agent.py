@@ -16,7 +16,7 @@ from .base import Agent
 class VerifierAgent(Agent):
     name = "verifier_agent"
     role = "Gate the incoming request, then validate schema, caps, nulls and evidence IDs"
-    capabilities = frozenset({"orders", "items", "payments", "sellers"})
+    capabilities = frozenset({"orders", "items", "payments", "sellers", "customers"})
 
     def handle(self, message: Message, view: DataView) -> AgentReport:
         # Two intents: gate the request on the way in, gate the document on the
@@ -51,8 +51,28 @@ class VerifierAgent(Agent):
             known_payment_refs=known_payments,
         )
 
+        anomalies: list[str] = []
+        if not errors:
+            # Business gates run on a structurally sound document only -- on a
+            # malformed one they would report noise about missing keys.
+            order = view.order(order_id)
+            customer = view.customer(order.customer_id) if order else None
+            business, anomalies = schema.validate_business(
+                doc,
+                order_id=order_id,
+                order_status=order.order_status if order else "",
+                order_sellers={i.seller_id for i in view.items(order_id)},
+                customer_unique_id=customer.customer_unique_id if customer else "",
+            )
+            errors = business
+
+        notes = ["schema and business rules clean"] if not errors else (
+            [f"{len(errors)} violation(s)"] + errors[:5]
+        )
+        notes += [f"data anomaly: {a}" for a in anomalies]
+
         return AgentReport(
-            facts={"errors": errors, "passed": not errors},
-            notes=(["schema clean"] if not errors else [f"{len(errors)} violation(s)"] + errors[:5]),
+            facts={"errors": errors, "anomalies": anomalies, "passed": not errors},
+            notes=notes,
             degraded=bool(errors),
         )

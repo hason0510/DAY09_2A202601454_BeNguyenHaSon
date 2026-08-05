@@ -97,6 +97,168 @@ def _round2(value: Any) -> Any:
     return round(value, 2) if _is_num(value) else value
 
 
+PARTY_TYPE_FOR = {
+    "canceled_order_paid": "platform",
+    "unavailable_order_paid": "platform",
+    "late_delivery_seller": "seller",
+    "late_delivery_logistics": "logistics_provider",
+}
+
+MONEY_EPS = 0.005  # half a centavo: below any real rounding difference
+
+
+def validate_business(
+    doc: dict,
+    *,
+    order_id: str,
+    order_status: str,
+    order_sellers: set[str],
+    customer_unique_id: str,
+) -> tuple[list[str], list[str]]:
+    """Real-world sanity gates, on top of the structural ones.
+
+    The structural validator asks "is this well-formed JSON of the right
+    shape". This one asks the questions a refunds desk would ask before paying
+    anything out: are we refunding money we actually collected, is there
+    somebody to recover it from, is that somebody even involved in this order,
+    and can we prove any of it.
+
+    Returns (errors, anomalies). Errors are ours and block the write. Anomalies
+    describe the source CSV -- a parcel logged as delivered before the carrier
+    collected it is Olist's data problem, and suppressing our output over it
+    would lose a case we answered correctly. Those get logged, not gated.
+    """
+    from .rules import PRIMARY_ACTION, RECONCILE_TOLERANCE_BRL, ROOT_CAUSE
+
+    errors: list[str] = []
+    anomalies: list[str] = []
+
+    assessment = doc["case_assessment"]
+    primary = assessment["primary_issue"]
+    secondary = assessment["secondary_issues"]
+    entities = doc["affected_entities"]
+    rec = doc["payment_reconciliation"]
+    delivery = doc["delivery_analysis"]
+    rca = doc["root_cause_analysis"]
+    parties = rca["responsible_parties"]
+    evidence = set(doc["evidence_ids"])
+    actions = doc["resolution_actions"]
+    refund = doc["financial_resolution"]["recommended_refund_brl"]
+    paid = rec["payment_total_brl"]
+    freight = rec["freight_total_brl"]
+
+    # -- A. you cannot refund money you never collected --------------------
+    if refund > paid + MONEY_EPS:
+        errors.append(f"refund {refund} exceeds the {paid} the customer actually paid")
+    if refund > 0 and not entities["payment_ids"]:
+        errors.append("refund proposed but the order carries no payment row")
+
+    # the amount has to be the one the verdict promises
+    if primary in ("canceled_order_paid", "unavailable_order_paid"):
+        if abs(refund - paid) > MONEY_EPS:
+            errors.append(f"{primary} owes the full payment total {paid}, drafted {refund}")
+    elif primary in ("late_delivery_seller", "late_delivery_logistics"):
+        if abs(refund - freight) > MONEY_EPS:
+            errors.append(f"{primary} owes the freight total {freight}, drafted {refund}")
+    elif refund != 0:
+        errors.append(f"{primary} owes nothing, drafted {refund}")
+
+    # -- B. somebody has to be on the hook for a payout --------------------
+    if refund > 0 and not parties:
+        errors.append("money is being paid out with no responsible party to recover from")
+    if refund == 0 and parties:
+        errors.append("no payout, yet a party is being held responsible")
+    expected_party = PARTY_TYPE_FOR.get(primary)
+    for party in parties:
+        if expected_party and party["party_type"] != expected_party:
+            errors.append(f"{primary} blames a {party['party_type']}, expected {expected_party}")
+        if party["party_type"] == "seller" and party["party_id"] not in order_sellers:
+            errors.append(f"blaming seller {party['party_id']}, who has no item on this order")
+
+    # -- C. the verdict has to match what the data says --------------------
+    if primary == "canceled_order_paid" and order_status != "canceled":
+        errors.append(f"canceled_order_paid on an order whose status is {order_status}")
+    if primary == "unavailable_order_paid" and order_status != "unavailable":
+        errors.append(f"unavailable_order_paid on an order whose status is {order_status}")
+
+    variance = delivery["delivery_variance_hours"]
+    late_sellers = delivery["late_handoff_seller_ids"]
+    if primary in ("late_delivery_seller", "late_delivery_logistics"):
+        if variance is None or variance <= 0:
+            errors.append(f"{primary} but delivery_variance_hours is {variance}")
+    if primary == "late_delivery_seller" and not late_sellers:
+        errors.append("late_delivery_seller but no seller is flagged as a late handoff")
+    if primary == "late_delivery_logistics" and late_sellers:
+        errors.append("late_delivery_logistics while sellers are flagged late -- seller rule outranks it")
+    if primary == "unsupported_late_claim" and variance is not None and variance > 0:
+        errors.append(f"claim rejected as unsupported although the parcel was {variance}h late")
+
+    root = rca["ranked_causes"][0]["cause_code"]
+    if root != ROOT_CAUSE[primary]:
+        errors.append(f"rank-1 cause {root} does not match {primary}")
+
+    # -- D. we must be able to prove what we assert ------------------------
+    if f"order:{order_id}" not in evidence:
+        errors.append("evidence does not cite the order under investigation")
+    if f"policy:{root}" not in evidence:
+        errors.append(f"evidence does not cite the rule applied ({root})")
+    for party in parties:
+        if party["party_type"] == "seller" and f"seller:{party['party_id']}" not in evidence:
+            errors.append(f"seller {party['party_id']} is blamed but not cited as evidence")
+    for sid in entities["seller_ids"]:
+        if sid not in order_sellers:
+            errors.append(f"affected seller {sid} has no item on this order")
+    for sid in late_sellers:
+        if sid not in order_sellers:
+            errors.append(f"late-handoff seller {sid} has no item on this order")
+
+    # -- E. the arithmetic has to agree with itself ------------------------
+    if rec["expected_total_brl"] is not None:
+        if abs(rec["item_total_brl"] + freight - rec["expected_total_brl"]) > MONEY_EPS:
+            errors.append("item_total + freight_total does not equal expected_total")
+        if abs(paid - rec["expected_total_brl"] - rec["difference_brl"]) > MONEY_EPS:
+            errors.append("difference_brl is not payment_total minus expected_total")
+        if rec["reconciled"] != (abs(rec["difference_brl"]) <= RECONCILE_TOLERANCE_BRL):
+            errors.append("reconciled disagrees with difference_brl")
+
+    # -- F. every claim must be backed by what we listed -------------------
+    for flag, holds in (
+        ("multi_item_order", len(entities["item_ids"]) >= 2),
+        ("multi_seller_order", len(entities["seller_ids"]) >= 2),
+        ("split_payment", len(entities["payment_ids"]) >= 2),
+        ("repeat_customer", bool(doc["customer_context"]["related_order_ids"])),
+        ("multiple_categories", len(doc["product_context"]["category_names"]) >= 2),
+    ):
+        if (flag in secondary) != holds:
+            errors.append(
+                f"secondary issue {flag} is {'claimed' if flag in secondary else 'missing'} "
+                f"but the entities in this document say otherwise"
+            )
+
+    # -- G. identity -------------------------------------------------------
+    if doc["customer_context"]["customer_unique_id"] != customer_unique_id:
+        errors.append("customer_unique_id does not own the order under investigation")
+
+    # -- H. actions --------------------------------------------------------
+    if actions[0] != PRIMARY_ACTION[primary]:
+        errors.append(f"first action {actions[0]} is not the action {primary} calls for")
+    if primary == "valid_split_payment" and "verify_payment_allocation" in actions:
+        errors.append("verify_payment_allocation is redundant for valid_split_payment")
+    if refund > 0 and "verify_refund_completion" not in actions:
+        errors.append("money is paid out with no step to verify the refund landed")
+
+    # -- source-data anomalies: logged, never gated ------------------------
+    delivered_at, handoff_at = delivery["delivered_at"], delivery["carrier_handoff_at"]
+    if delivered_at and handoff_at and delivered_at < handoff_at:
+        anomalies.append(
+            f"CSV says delivered {delivered_at} before carrier pickup {handoff_at}"
+        )
+    if rec["expected_total_brl"] is not None and rec["reconciled"] is False:
+        anomalies.append(f"payment is off by {rec['difference_brl']} BRL against items + freight")
+
+    return errors, anomalies
+
+
 def validate_request(
     case: dict,
     *,
