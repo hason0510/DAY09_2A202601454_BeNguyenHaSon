@@ -1,6 +1,6 @@
 {
-  "run_id": "run_20260805_152435",
-  "generated_at": "2026-08-05T15:25:10",
+  "run_id": "run_20260805_160517",
+  "generated_at": "2026-08-05T16:05:19",
   "model": {
     "name": "gpt-4o-mini",
     "provider": "openai",
@@ -20,12 +20,12 @@
     ]
   },
   "runtime": {
-    "elapsed_s": 35.07,
+    "elapsed_s": 1.75,
     "workers": 6,
     "cases": 50,
     "outputs_written": 50,
     "hard_gate_failures": 0,
-    "llm_enabled": true
+    "llm_enabled": false
   },
   "agents": {
     "intake_agent": {
@@ -96,13 +96,19 @@
     "sellers": 3095
   },
   "policy_version": "EC_POLICY_V2",
+  "interpretation_switches": {
+    "category_language": "pt",
+    "ranked_causes": "single",
+    "evidence_sellers": "all",
+    "output_dir": "ev_all"
+  },
   "llm_usage": {
-    "enabled": true,
-    "calls": 150,
+    "enabled": false,
+    "calls": 0,
     "failed_calls": 0,
-    "prompt_tokens": 78381,
-    "completion_tokens": 5739,
-    "total_tokens": 84120
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
   },
   "results": {
     "primary_issue_distribution": {
@@ -114,58 +120,19 @@
       "valid_split_payment": 8
     },
     "adjudicator_disagreements": [],
-    "cases_with_critic_findings": [
-      "EC_001",
-      "EC_002",
-      "EC_003",
-      "EC_005",
-      "EC_006",
-      "EC_007",
-      "EC_008",
-      "EC_010",
-      "EC_013",
-      "EC_014",
-      "EC_015",
-      "EC_016",
-      "EC_017",
-      "EC_018",
-      "EC_019",
-      "EC_020",
-      "EC_021",
-      "EC_022",
-      "EC_023",
-      "EC_025",
-      "EC_027",
-      "EC_029",
-      "EC_032",
-      "EC_036",
-      "EC_037",
-      "EC_038",
-      "EC_039",
-      "EC_040",
-      "EC_041",
-      "EC_042",
-      "EC_044",
-      "EC_045",
-      "EC_046",
-      "EC_048",
-      "EC_049",
-      "EC_050"
-    ],
+    "cases_with_critic_findings": [],
     "cases_repaired": [],
     "failed_cases": []
   },
   "trace": {
     "path": "logging/trace.jsonl",
-    "lines": 1088,
+    "lines": 902,
     "events": {
       "run_start": 1,
       "case_start": 50,
       "handoff": 400,
-      "llm_call": 150,
       "report": 400,
       "case_end": 50,
-      "critic_findings": 36,
       "run_end": 1
     }
   }

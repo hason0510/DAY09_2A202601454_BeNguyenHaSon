@@ -64,7 +64,22 @@ def main() -> int:
     parser.add_argument("--no-llm", action="store_true", help="skip every LLM hop")
     parser.add_argument("--cases", nargs="*", help="case ids to run (default: all)")
     parser.add_argument("--workers", type=int, default=config.MAX_WORKERS)
+    parser.add_argument("--out", help="output directory (default: output/)")
+    parser.add_argument("--category-language", choices=("pt", "en"))
+    parser.add_argument("--ranked-causes", choices=("single", "contributing"))
+    parser.add_argument("--evidence-sellers", choices=("responsible", "all"))
     args = parser.parse_args()
+
+    # Interpretation switches: CLI overrides the defaults in config.py so a
+    # variant can be generated side by side without editing source.
+    if args.out:
+        config.OUTPUT_DIR = Path(args.out).resolve()
+    if args.category_language:
+        config.CATEGORY_LANGUAGE = args.category_language
+    if args.ranked_causes:
+        config.RANKED_CAUSES = args.ranked_causes
+    if args.evidence_sellers:
+        config.EVIDENCE_SELLERS = args.evidence_sellers
 
     load_env(config.ROOT)
     run_id = f"run_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -178,6 +193,12 @@ def main() -> int:
         "agents": bus.roster,
         "dataset": {"source": "Brazilian E-Commerce Public Dataset by Olist", **store.stats},
         "policy_version": config.POLICY_VERSION,
+        "interpretation_switches": {
+            "category_language": config.CATEGORY_LANGUAGE,
+            "ranked_causes": config.RANKED_CAUSES,
+            "evidence_sellers": config.EVIDENCE_SELLERS,
+            "output_dir": config.OUTPUT_DIR.name,
+        },
         "llm_usage": llm.usage,
         "results": {
             "primary_issue_distribution": dict(sorted(issues.items())),

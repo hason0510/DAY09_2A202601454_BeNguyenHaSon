@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .. import config
 from .olist_store import Customer, OlistStore, Order, OrderItem, Payment
 
 
@@ -70,7 +71,11 @@ class DataView:
     # -- products ----------------------------------------------------------
     def category_of(self, product_id: str) -> str:
         self._guard("products")
-        return self._store.product_category.get(product_id, "")
+        raw = self._store.product_category.get(product_id, "")
+        if config.CATEGORY_LANGUAGE == "en":
+            # Fall back to the raw name when the translation table has no row.
+            return self._store.category_translation.get(raw, raw)
+        return raw
 
     def product_exists(self, product_id: str) -> bool:
         self._guard("products")

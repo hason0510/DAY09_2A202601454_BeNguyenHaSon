@@ -18,3 +18,4 @@ venv/
 # --- build artifacts ---
 input.zip
 output.zip
+output_v2.zip

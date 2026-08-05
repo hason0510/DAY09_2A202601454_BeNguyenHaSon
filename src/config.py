@@ -41,6 +41,27 @@ METADATA_PATH = LOG_DIR / "metadata.json"
 
 POLICY_VERSION = "EC_POLICY_V2"
 
+# --------------------------------------------------------------------------
+# Interpretation switches
+#
+# README leaves these three genuinely undefined. Each is a coin flip that moves
+# a whole graded sub-field across all 50 cases, so they are switches rather than
+# hard-coded choices: a variant can be regenerated in seconds once we learn
+# which reading the grader used.
+# --------------------------------------------------------------------------
+
+# "pt" -> raw product_category_name from products.csv ("beleza_saude")
+# "en" -> product_category_name_english from the translation table ("health_beauty")
+CATEGORY_LANGUAGE = "pt"
+
+# "single"      -> ranked_causes holds only the cause behind the primary issue
+# "contributing"-> also rank the other codes the data supports (max 3)
+RANKED_CAUSES = "single"
+
+# "responsible" -> evidence lists only sellers the policy blames
+# "all"         -> evidence lists every seller on the order
+EVIDENCE_SELLERS = "responsible"
+
 # How many cases run concurrently. Each case is an independent A2A conversation,
 # so parallelism does not change any output -- only wall clock.
 MAX_WORKERS = 6

@@ -22,6 +22,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FMT = "%Y-%m-%d %H:%M:%S"
 
+# Optional first argument: which output directory to audit (default output/).
+OUT_DIR = ROOT / (sys.argv[1] if len(sys.argv) > 1 else "output")
+
 
 def read(name):
     with (ROOT / "data" / name).open(encoding="utf-8-sig", newline="") as fh:
@@ -60,7 +63,7 @@ def main() -> int:
         cid = case["case_id"]
         oid = case["customer_request"]["claimed_order_id"]
 
-        out_path = ROOT / "output" / f"{cid}.json"
+        out_path = OUT_DIR / f"{cid}.json"
         if not out_path.exists():
             problems.append(f"{cid}: output file missing")
             continue
@@ -219,7 +222,7 @@ def main() -> int:
         if not (0.0 <= conf <= 1.0):
             bad(f"confidence out of range: {conf}")
 
-    print(f"audited {checked} case(s) against the raw CSVs")
+    print(f"audited {checked} case(s) in {OUT_DIR.name}/ against the raw CSVs")
     if problems:
         print(f"FAIL -- {len(problems)} problem(s):")
         for p in problems[:40]:

@@ -8,7 +8,38 @@ Two jobs, both boring on purpose:
 
 from __future__ import annotations
 
+from . import config
 from .policy import schema
+
+
+def _ranked_causes(facts: dict, verdict: dict) -> list[dict]:
+    """Rank 1 is always the cause behind the primary issue.
+
+    With RANKED_CAUSES == "contributing" we also rank the other codes the data
+    independently supports. README's example shows a single cause, so "single"
+    stays the default; this switch exists to A/B the other reading.
+    """
+    primary_code = verdict["root_cause_code"]
+    codes = [primary_code]
+
+    if config.RANKED_CAUSES == "contributing":
+        variance = facts["delivery_variance_hours"]
+        arrived_late = (
+            facts["delivered_at"] is not None
+            and facts["estimated_delivery_at"] is not None
+            and (variance or 0.0) > 0
+        )
+        # A seller-caused delay still ends with the carrier delivering late.
+        if primary_code == "SELLER_HANDOFF_AFTER_LIMIT" and arrived_late:
+            codes.append("CARRIER_DELIVERED_AFTER_ESTIMATE")
+        # A reconciled split payment on a punctual order supports both codes.
+        if primary_code == "MULTIPLE_PAYMENTS_RECONCILED" and not arrived_late:
+            codes.append("DELIVERY_WITHIN_ESTIMATE")
+        if primary_code == "DELIVERY_WITHIN_ESTIMATE" and facts["payment_row_count"] >= 2:
+            codes.append("MULTIPLE_PAYMENTS_RECONCILED")
+
+    codes = codes[: schema.LIMITS["ranked_causes"]]
+    return [{"cause_code": code, "rank": i} for i, code in enumerate(codes, start=1)]
 
 
 def _evidence(facts: dict, verdict: dict) -> list[str]:
@@ -19,7 +50,12 @@ def _evidence(facts: dict, verdict: dict) -> list[str]:
     """
     order_id = facts["order_id"]
     reserved = [f"order:{order_id}"]
-    sellers = [f"seller:{sid}" for sid in verdict["responsible_seller_ids"]]
+    seller_ids = (
+        facts["seller_ids_all"]
+        if config.EVIDENCE_SELLERS == "all"
+        else verdict["responsible_seller_ids"]
+    )
+    sellers = [f"seller:{sid}" for sid in seller_ids]
     policy = [f"policy:{verdict['root_cause_code']}"]
 
     budget = schema.LIMITS["evidence_ids"] - len(reserved) - len(sellers) - len(policy)
@@ -88,7 +124,7 @@ def build_document(case_id: str, facts: dict, verdict: dict, confidence: float) 
             "payment_types": facts["payment_types"],
         },
         "root_cause_analysis": {
-            "ranked_causes": [{"cause_code": verdict["root_cause_code"], "rank": 1}],
+            "ranked_causes": _ranked_causes(facts, verdict),
             "responsible_parties": schema.cap(
                 verdict["responsible_parties"], "responsible_parties"
             ),
