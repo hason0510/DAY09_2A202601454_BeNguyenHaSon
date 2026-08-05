@@ -18,7 +18,9 @@
 | ------------------ | ------------------ | -------------- | --------------- | ---------- |
 | Data store + kiểm soát truy cập | `src/store/olist_store.py`, `src/store/views.py` (`load_store`, `build_view`) | 7/9 CSV Olist trong `data/` | Store đã index; `DataView` giới hạn theo capability | Hoàn thành |
 | Rule engine EC_POLICY_V2 | `src/policy/rules.py` (`decide_primary`, `decide_secondary`, `apply_policy`, `score_confidence`) | Fact sheet đã gộp | `Verdict`: primary/secondary issue, root cause, responsible party, refund, actions | Hoàn thành |
-| Schema + hard gate | `src/policy/schema.py` (`validate`, `cap`), `src/assembler.py` (`build_document`, `repair`) | `Verdict` + fact sheet | JSON đúng schema README mục 6; danh sách vi phạm | Hoàn thành |
+| Gate đầu vào | `src/policy/schema.py` (`validate_request`) | Case JSON gốc | Chặn case_id lệch file, `policy_version` lạ, order không có trong CSV; case bị chặn không sinh output | Hoàn thành |
+| Schema + hard gate đầu ra | `src/policy/schema.py` (`validate`, `cap`), `src/assembler.py` (`build_document`, `normalize_zeros`, `repair`) | `Verdict` + fact sheet | JSON đúng schema README mục 6; danh sách vi phạm | Hoàn thành |
+| Gate nghiệp vụ | `src/policy/schema.py` (`validate_business`) | Document đã dựng | 18 bất biến thực tế: không hoàn quá số đã thu, chi tiền phải có bên chịu trách nhiệm, không đổ lỗi seller ngoài đơn, evidence phải dẫn được order + policy, secondary issue phải có entity chống lưng | Hoàn thành |
 | Tầng A2A | `src/a2a/message.py`, `src/a2a/bus.py`, `src/a2a/trace.py` | Envelope giữa các agent | Định tuyến, cưỡng chế scope, `logging/trace.jsonl` | Hoàn thành |
 | 8 agent | `src/agents/fact_agents.py`, `reasoning_agents.py`, `verifier_agent.py` | Message A2A | `AgentReport` (facts + evidence + notes) | Hoàn thành |
 | Orchestration | `src/pipeline.py` (`Coordinator.run_case`), `run.py` | 50 file `input/EC_*.json` | 50 file `output/EC_*.json`, `logging/metadata.json` | Hoàn thành |
@@ -37,9 +39,9 @@
 | --------------------- | --------------------------- | ---------------- | ------------- |
 | Khảo sát dữ liệu trước khi code: đo độ phủ join và độ dài mảng thực tế | `data/`, `input/` | 50/50 order resolve được; max 5 item / 3 seller / 4 payment / 10 evidence mỗi case → không case nào chạm array cap | Script recon đọc trực tiếp CSV, chạy trước khi viết `src/` |
 | Cài đặt rule engine và chạy toàn bộ 50 case không dùng LLM | `src/policy/rules.py`, `run.py --no-llm` | 50/50 file, 0 vi phạm schema, 1.7s, 0 chi phí API | `python run.py --no-llm` |
-| Chạy full pipeline với gpt-4o-mini | `run.py`, `logging/metadata.json` | 50/50 file, 0 hard gate, 0 repair, 150 LLM call, 84.120 token, 35,07s | `python run.py` |
+| Chạy full pipeline với gpt-4o-mini | `run.py`, `logging/metadata.json` | 50/50 file, 0 hard gate, 0 repair, 150 LLM call, 84.171 token, 35,43s | `python run.py` |
 | Audit độc lập không dùng lại code pipeline | `tools/audit.py` | PASS 50/50 | `python tools/audit.py` |
-| Ghi trace thật của lượt chạy mới nhất | `logging/trace.jsonl` | 1088 dòng: 400 handoff, 400 report, 150 llm_call, 50 case_start, 50 case_end, 36 critic_findings, 1 run_start, 1 run_end | Đếm event trong file trace |
+| Ghi trace thật của lượt chạy mới nhất | `logging/trace.jsonl` | 1188 dòng: 450 handoff, 450 report, 150 llm_call, 50 case_start, 50 case_end, 36 critic_findings, 1 run_start, 1 run_end | Đếm event trong file trace |
 
 Nêu một output cụ thể mà phần việc của bạn tạo ra hoặc giúp xác minh:
 
@@ -51,8 +53,13 @@ lỗi nằm trong `src/` không thể tự che giấu. Kết quả lượt chạ
 value recomputes to the same answer`, 50/50 case.
 
 Giới hạn cần nói rõ: đây là kiểm tra tính nhất quán với dữ liệu nguồn, **không phải đo độ
-chính xác so với đáp án**. Repo không có ground truth nên tôi không có cơ sở để tuyên bố
-điểm số.
+chính xác so với đáp án**. Repo không có ground truth, nên audit sạch chỉ là điều kiện cần:
+nếu tôi đọc sai luật thì pipeline và audit sẽ sai giống hệt nhau.
+
+Kết quả chấm thực tế đã xác nhận đúng giới hạn đó: bài nộp đạt **78.87/100** trong khi audit
+của tôi báo PASS toàn bộ. Bảy thành phần điểm nằm gọn trong dải 77.3–80.2 — độ đồng đều đó
+cho thấy phần thiếu không nằm ở một field cụ thể (một field sai sẽ đánh sập đúng một thành
+phần) mà là một số case bị trừ toàn bộ. Phân tích chênh lệch dẫn tôi tới lỗi `-0.0` ở mục 6.
 
 ## 4. Giải thích phần kỹ thuật đã thực hiện
 
@@ -95,7 +102,7 @@ rule đầu tiên thỏa. Trường hợp không rule nào khớp được xử 
 | Output | 50 file `output/EC_*.json` theo schema README mục 6; `logging/trace.jsonl`; `logging/metadata.json` |
 | Module phụ thuộc | `src/store/olist_store.py` (dữ liệu), `src/llm/client.py` (LLM, optional) |
 | Module sử dụng output | `src/agents/verifier_agent.py` và `tools/audit.py` đều đọc lại output để kiểm tra |
-| Điều kiện lỗi cần xử lý | Order không có item row (6 case) → 3 field phải null, các mảng rỗng; thiếu `order_delivered_carrier_date` (13 case) → `carrier_handoff_at` null; agent ném exception → bus bắt, case xuống cấp chứ không chết cả run; LLM timeout → retry 3 lần rồi trả `None`, caller đã có sẵn đáp án deterministic |
+| Điều kiện lỗi cần xử lý | Request không hợp lệ (order không có trong CSV, `policy_version` lạ, `case_id` lệch tên file) → chặn tại cửa, không sinh output, exit code 2; `investigation_scope` tắt → không xuất mảng tương ứng **và** không gắn secondary issue tương ứng; order không có item row (6 case) → 3 field phải null, các mảng rỗng; thiếu `order_delivered_carrier_date` (13 case) → `carrier_handoff_at` null; agent ném exception → bus bắt, case xuống cấp chứ không chết cả run; LLM timeout → retry 3 lần rồi trả `None`, caller đã có sẵn đáp án deterministic |
 
 ### Cách xác minh
 
@@ -109,9 +116,9 @@ python run.py                   # full pipeline với gpt-4o-mini
   trị khách quan giống hệt nhau giữa lượt `--no-llm` và lượt full (chỉ `confidence` khác vì
   nó phụ thuộc mức đồng thuận của adjudicator).
 - **Kết quả thực tế:** đúng như trên. Lượt full cuối: 50/50 file, 0 hard gate, 0 case cần
-  repair, 0 bất đồng adjudicator, 150 LLM call, 84.120 token, 35,07s. `tools/audit.py` in
+  repair, 0 bất đồng adjudicator, 150 LLM call, 84.171 token, 35,43s. `tools/audit.py` in
   `PASS -- every graded value recomputes to the same answer`.
-- **Artifact/log:** `logging/trace.jsonl` (1088 dòng), `logging/metadata.json`, `output/`.
+- **Artifact/log:** `logging/trace.jsonl` (1188 dòng), `logging/metadata.json`, `output/`.
   Không chứa secret; `.env` đã được `.gitignore` chặn và tôi đã kiểm bằng `git check-ignore -v .env`.
 
 ## 5. Một quyết định kỹ thuật quan trọng
@@ -136,30 +143,32 @@ python run.py                   # full pipeline với gpt-4o-mini
 
 ## 6. Một lỗi hoặc blocker đã xử lý
 
-- **Triệu chứng/lỗi nguyên văn:** lượt chạy full đầu tiên báo
-  `adjudicator disagreements : 18`. Lý do model đưa ra trong trace, lặp lại gần như nguyên
-  văn ở nhiều case: `"Order delivered on time and payment reconciles."` — kể cả trên các
-  case có `delivery_variance_hours` dương, tức là giao trễ.
-- **Lệnh hoặc bước tái hiện:** `python run.py` rồi đọc `logging/trace.jsonl`, lọc event
-  `llm_call` có `purpose == "adjudicate"` và đối chiếu với `case_end`.
-- **Nguyên nhân gốc:** không phải rule engine sai. Fact sheet tôi gửi cho adjudicator chứa
-  `delivered_at`, `estimated_delivery_at` và `delivery_variance_hours` (số thực có dấu), rồi
-  kỳ vọng model tự suy ra phép so sánh ngày. Model không đọc dấu của số, mặc định coi mọi
-  đơn đã giao là giao đúng hạn. Dấu hiệu nhận ra là bất đồng không rải rác mà tuyệt đối theo
-  nhóm: `late_delivery_logistics` sai 10/10, `valid_split_payment` sai 8/8 — một model đoán
-  bừa không cho ra pattern sạch như vậy, nên nghi ngờ phải đặt vào phía input của prompt.
-- **Cách xử lý:** chuyển phép so sánh về lớp deterministic. `PolicyAgent._fact_sheet` nay
-  tính sẵn `delivered_after_estimate`, `has_multiple_payment_rows`, `has_item_rows` và đưa
-  boolean cho model; prompt ghi rõ `delivered_after_estimate == true` nghĩa là TRỄ.
-- **Cách xác minh sau khi sửa:** chạy lại `python run.py` → `adjudicator disagreements : 0`,
-  50/50 file, schema sạch. Hai lỗi cùng loại phát hiện sau đó cũng xử lý theo cách này: model
-  đọc `reconciled: null` thành "không có vấn đề thanh toán" (5 bất đồng → 0), và không tự
-  biết rule 5 thắng rule 6 khi hai điều kiện cùng đúng.
-- **Điều học được:** khi LLM bất đồng hàng loạt và có hệ thống, nghi prompt của mình trước
-  khi nghi lớp deterministic. Cả ba lần trong bài này, bất đồng 100% của trọn một nhóm case
-  đều là lỗi fact sheet, không phải lỗi model. Hệ quả thiết kế: mọi phép so sánh nên được
-  giải sẵn thành boolean trước khi đưa vào prompt; model chỉ nên được giao việc áp dụng thứ
-  tự ưu tiên.
+- **Triệu chứng/lỗi nguyên văn:** bài nộp đạt 78.87 dù `tools/audit.py` báo
+  `PASS -- every graded value recomputes to the same answer` trên cả 50 case. Nghĩa là có
+  thứ gì đó sai mà cả pipeline lẫn audit đều không nhìn thấy. Quét lại output tìm ra
+  6 file chứa `"difference_brl": -0.0`.
+- **Lệnh hoặc bước tái hiện:**
+  `grep -l '\-0\.0' output/*.json` → EC_002, EC_008, EC_022, EC_036, EC_048, EC_049.
+- **Nguyên nhân gốc:** khi tổng payment thấp hơn tổng item + freight một lượng cực nhỏ,
+  `round()` trả về `-0.0`, và `json.dump` ghi nguyên chuỗi `-0.0` — khác token với `0.0` đối
+  với bất kỳ trình chấm nào so khớp text hoặc kiểm nghiêm. Lỗi này ẩn được vì cả hai lớp
+  kiểm tra của tôi đều dùng `==` trong Python, mà `-0.0 == 0.0` là `True`. Nguyên nhân sâu
+  hơn: hàm `_r2` của tôi viết `round(value + 0.0, 2)` — cộng `0.0` **trước** khi làm tròn,
+  hoàn toàn vô tác dụng, trong khi phép triệt tiêu `-0.0` chỉ xảy ra khi cộng **sau**.
+- **Cách xử lý:** sửa ba lớp. (1) `_r2` đổi thành `round(value, 2) + 0.0`;
+  (2) `assembler.normalize_zeros` quét lại toàn document trước khi ghi; (3) thêm gate vào
+  `schema.validate` dùng `math.copysign` để phát hiện negative zero ở bất kỳ đâu — `==`
+  không phân biệt được nên phải kiểm dấu.
+- **Cách xác minh sau khi sửa:** tiêm `-0.0` vào `difference_brl` của EC_008 rồi gọi
+  `schema.validate` → gate trả `negative zero at payment_reconciliation.difference_brl`.
+  Sinh lại toàn bộ: 0 giá trị `-0.0` còn lại, audit vẫn PASS 50/50, và quét trong zip cũng
+  sạch. Đúng 6 file thay đổi, khớp danh sách phát hiện ban đầu.
+- **Điều học được:** một lớp kiểm tra chỉ bắt được thứ nó có kiểm. Audit của tôi so sánh
+  giá trị bằng `==` nên mù hoàn toàn với sai khác ở tầng *biểu diễn* — thứ mà trình chấm lại
+  nhìn thấy. Bài học kỹ thuật: khi output là JSON ghi ra file, phải kiểm cả *chuỗi được ghi*
+  chứ không chỉ *giá trị trong bộ nhớ*. Bài học về quy trình: một artifact xác minh báo PASS
+  không chứng minh output đúng, nó chỉ chứng minh output nhất quán với những gì artifact đó
+  biết cách hỏi.
 
 ## 7. Hiểu biết về luồng end-to-end
 
@@ -185,16 +194,26 @@ trả lời trực tiếp mà không bịa. Tôi trả lời phần tương đư
    freight từ `order_product_agent` được chuyển tiếp sang `payment_agent` để đối soát. Toàn
    bộ fact gộp thành một fact sheet phẳng, đưa vào `policy_agent`, dựng thành document, qua
    `critic_agent` rồi `verifier_agent`, cuối cùng ghi ra `output/EC_xxx.json`.
-2. **Không có ground truth nên không đo được accuracy.** Repo chỉ có input và dữ liệu, không
-   có đáp án. Thay vào đó tôi kiểm tính nhất quán: `tools/audit.py` tính lại độc lập mọi giá
-   trị được chấm từ CSV rồi diff. Đây là điều kiện cần, không phải điều kiện đủ — nếu tôi đọc
-   sai luật, cả pipeline lẫn audit sẽ sai giống nhau. Tín hiệu gián tiếp duy nhất tôi có là
-   phân bố verdict ra 10/10/8/8/8/6 phủ đều 6 nhánh policy và không case nào rơi vào fallback,
-   gợi ý cách đọc luật khớp với ý đồ ra đề.
-3. **Verify khác validate ở điểm nào trong bài này.** `verifier_agent` validate cấu trúc:
-   schema, array cap, null handling, evidence ID có tồn tại trong CSV không — nó dựng lại tập
-   ID hợp lệ từ nguồn chứ không tin draft. `tools/audit.py` thì verify nội dung: tính lại giá
-   trị và so sánh. Một draft có thể qua validate mà vẫn sai số, nên cần cả hai.
+2. **Không có ground truth trong repo nên phải đo gián tiếp.** Tôi kiểm tính nhất quán bằng
+   `tools/audit.py` (tính lại độc lập mọi giá trị được chấm từ CSV rồi diff) và bằng phân bố
+   verdict: ra 10/10/8/8/8/6 phủ đều 6 nhánh policy, 0 case rơi vào fallback — gợi ý cách đọc
+   luật khớp ý đồ ra đề. Cả hai đều là điều kiện cần, không phải điều kiện đủ. Khi có điểm
+   chấm thật (78.87), tôi dùng chính bảng điểm theo thành phần làm tín hiệu chẩn đoán: độ
+   đồng đều giữa 7 thành phần cho biết lỗi nằm ở mức *case*, không phải mức *field*, và loại
+   trừ được các nghi vấn diễn giải (đổi ngôn ngữ category sẽ đụng 43/50 case — quá nhiều so
+   với mức chênh quan sát được).
+3. **Verify khác validate ở điểm nào trong bài này.** Có bốn lớp, mỗi lớp hỏi một câu khác
+   nhau. `validate_request` hỏi "request này có đáng xử lý không" và chặn trước khi bất kỳ
+   agent nào chạy. `validate` hỏi "document có đúng hình dạng không". `validate_business`
+   hỏi câu của một bộ phận hoàn tiền: có đang hoàn quá số tiền đã thu không, có ai để truy
+   thu không, người bị đổ lỗi có thật sự dính tới đơn này không, có chứng minh được không.
+   `tools/audit.py` thì tính lại từ CSV để hỏi "con số có đúng không". Một document có thể
+   qua được lớp cấu trúc mà vẫn sai nghiệp vụ, và qua cả hai mà vẫn sai số — nên cần đủ cả.
+   Ranh giới tôi giữ: gate chỉ chặn lỗi của hệ thống; dị thường của CSV gốc (hàng ghi nhận
+   giao trước khi carrier nhận) chỉ ghi vào trace, vì chặn output vì dữ liệu nguồn dị là tự
+   làm mất một case mình trả lời đúng. Điểm chung của cả bốn lớp: chúng dựng lại tập ID hợp
+   lệ từ CSV chứ không tin draft, nên một ID bịa ra không thể lọt bằng cách nhất quán với
+   chính nó.
 4. **Vì sao chạy cả `--no-llm` và full trên cùng bộ input.** Để tách biến. Lượt `--no-llm`
    chứng minh mọi giá trị khách quan đã đúng trước khi thêm LLM; lượt full chỉ được phép làm
    khác đi đúng một field là `confidence`. Nếu lượt full lệch ở field nào khác thì đó là dấu
