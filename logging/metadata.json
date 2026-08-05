@@ -1,6 +1,6 @@
 {
-  "run_id": "run_20260805_163946",
-  "generated_at": "2026-08-05T16:40:21",
+  "run_id": "run_20260805_165801",
+  "generated_at": "2026-08-05T16:58:38",
   "model": {
     "name": "gpt-4o-mini",
     "provider": "openai",
@@ -20,7 +20,7 @@
     ]
   },
   "runtime": {
-    "elapsed_s": 34.43,
+    "elapsed_s": 36.48,
     "workers": 6,
     "cases": 50,
     "outputs_written": 50,
@@ -100,15 +100,15 @@
     "category_language": "pt",
     "ranked_causes": "single",
     "evidence_sellers": "responsible",
-    "output_dir": "output"
+    "output_dir": "output_v2"
   },
   "llm_usage": {
     "enabled": true,
     "calls": 150,
     "failed_calls": 0,
     "prompt_tokens": 78381,
-    "completion_tokens": 5811,
-    "total_tokens": 84192
+    "completion_tokens": 5818,
+    "total_tokens": 84199
   },
   "results": {
     "primary_issue_distribution": {

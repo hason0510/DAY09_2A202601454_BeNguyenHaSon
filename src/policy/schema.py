@@ -9,6 +9,7 @@ than shipping a case that a strict grader would zero.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any, Callable
 
@@ -111,6 +112,21 @@ def validate(
     def need(cond: bool, msg: str) -> None:
         if not cond:
             errors.append(msg)
+
+    # -- no negative zero anywhere ----------------------------------------
+    # json.dump writes -0.0 literally, which is a different token from 0.0 to
+    # any grader comparing text or doing a strict check. Gate it at the door.
+    def _scan_neg_zero(node, path="") -> None:
+        if isinstance(node, dict):
+            for k, v in node.items():
+                _scan_neg_zero(v, f"{path}.{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                _scan_neg_zero(v, f"{path}[{i}]")
+        elif isinstance(node, float) and node == 0.0 and math.copysign(1.0, node) < 0:
+            errors.append(f"negative zero at {path.lstrip('.')}")
+
+    _scan_neg_zero(doc)
 
     # -- top level ---------------------------------------------------------
     for key in (

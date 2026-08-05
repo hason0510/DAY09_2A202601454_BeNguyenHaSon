@@ -69,7 +69,8 @@ class Verdict:
 
 
 def _r2(value: float) -> float:
-    return round(value + 0.0, 2)
+    """Round to 2 decimals, collapsing -0.0 to 0.0. See fact_agents._r2."""
+    return round(value, 2) + 0.0
 
 
 def decide_primary(facts: dict) -> tuple[str, list[str], bool]:

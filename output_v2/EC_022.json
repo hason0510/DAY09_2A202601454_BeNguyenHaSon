@@ -63,7 +63,7 @@
     "freight_total_brl": 77.72,
     "expected_total_brl": 757.68,
     "payment_total_brl": 757.68,
-    "difference_brl": -0.0,
+    "difference_brl": 0.0,
     "reconciled": true,
     "payment_types": [
       "credit_card",

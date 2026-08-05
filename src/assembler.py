@@ -76,11 +76,27 @@ def _evidence(facts: dict, verdict: dict) -> list[str]:
     return deduped[: schema.LIMITS["evidence_ids"]]
 
 
+def normalize_zeros(node):
+    """Collapse every -0.0 in the finished document to 0.0.
+
+    A belt-and-braces sweep: the rounding helpers already normalise, but a value
+    can reach the document from anywhere, and "-0.0" is a different token from
+    "0.0" to a strict grader.
+    """
+    if isinstance(node, dict):
+        return {k: normalize_zeros(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [normalize_zeros(v) for v in node]
+    if isinstance(node, float) and node == 0.0:
+        return 0.0
+    return node
+
+
 def build_document(case_id: str, facts: dict, verdict: dict, confidence: float) -> dict:
     has_items = facts["item_row_count"] > 0
     order_id = facts["order_id"]
 
-    return {
+    return normalize_zeros({
         "case_id": case_id,
         "case_assessment": {
             "primary_issue": verdict["primary_issue"],
@@ -135,7 +151,7 @@ def build_document(case_id: str, facts: dict, verdict: dict, confidence: float) 
             "recommended_refund_brl": verdict["recommended_refund_brl"],
         },
         "resolution_actions": schema.cap(verdict["resolution_actions"], "resolution_actions"),
-    }
+    })
 
 
 def repair(doc: dict, facts: dict, known_items: set[str], known_payments: set[str]) -> dict:
