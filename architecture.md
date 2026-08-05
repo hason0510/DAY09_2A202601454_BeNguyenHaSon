@@ -85,6 +85,7 @@ Hai điểm đáng chú ý:
 
 | # | Từ → Đến | Intent | Nội dung bàn giao |
 | -: | --- | --- | --- |
+| 0 | coordinator → verifier | `validate_request` | case gốc — **chặn tại cửa nếu input không hợp lệ** |
 | 1 | coordinator → intake | `parse_claim` | `customer_request`, `investigation_scope` |
 | 2 | coordinator → customer | `resolve_identity` | `order_id` |
 | 3 | coordinator → order_product | `inspect_order` | `order_id` |
@@ -118,7 +119,34 @@ trong `src/policy/rules.py`.
 
 ## 5. Cơ chế kiểm chứng
 
-Ba lớp độc lập:
+### 5.0. Gate đầu vào (chạy trước mọi agent)
+
+`verifier_agent` gác **cả hai chiều**. Trước khi bất kỳ agent nào chạm vào case,
+`schema.validate_request` kiểm:
+
+| Kiểm tra | Chặn khi |
+| --- | --- |
+| `case_id` | lệch tên file |
+| `policy_version` | khác `EC_POLICY_V2` — pipeline không cài rule set nào khác |
+| `claimed_order_id` | thiếu, sai định dạng 32 ký tự hex, hoặc **không tồn tại trong orders.csv** |
+| `customer_request` | thiếu hoặc không phải object |
+| `investigation_scope.*` | cờ không phải boolean |
+
+Case bị chặn **không sinh file output**, được ghi event `request_rejected`, đếm vào
+`metadata.json.runtime.requests_rejected` và làm run trả exit code 2.
+
+Lý do có lớp này: nếu chỉ gác output, một request hỏng vẫn chảy hết pipeline rồi ra
+một document trông rất tự tin. Chặn ở cửa là khác biệt giữa "không có câu trả lời" và
+"một câu trả lời sai trông như đúng".
+
+### 5.0.b `investigation_scope` là chỉ thị, không phải trang trí
+
+`include_customer_history: false` → `related_order_ids` rỗng **và** không gắn
+`repeat_customer`. `include_product_context: false` → `product_ids`/`category_names`
+rỗng **và** không gắn `multiple_categories`. Áp dụng trên fact sheet trước khi policy
+chạy, để việc ta không được phép điều tra thì cũng không được phép kết luận.
+
+### Ba lớp kiểm chứng đầu ra
 
 1. **LLM adjudicator** (`policy_agent`) — phân loại lại case từ fact sheet, hoàn toàn
    độc lập với rule engine. Bất đồng được ghi trace và trừ điểm `confidence`.

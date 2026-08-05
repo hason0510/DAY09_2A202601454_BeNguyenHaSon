@@ -167,6 +167,14 @@ def main() -> int:
                 cats.append(c)
         uid = customers[o["customer_id"]]["customer_unique_id"]
         related = [x for _, x in sorted(unique_orders[uid]) if x != oid]
+
+        # investigation_scope is an instruction, not decoration: recompute the
+        # expectation the same way the pipeline must have applied it.
+        scope = case.get("investigation_scope") or {}
+        if not scope.get("include_customer_history", True):
+            related = []
+        if not scope.get("include_product_context", True):
+            pids, cats = [], []
         want_secondary = []
         if len(it) >= 2:
             want_secondary.append("multi_item_order")

@@ -1,6 +1,6 @@
 {
-  "run_id": "run_20260805_170246",
-  "generated_at": "2026-08-05T17:03:37",
+  "run_id": "run_20260805_171657",
+  "generated_at": "2026-08-05T17:17:36",
   "model": {
     "name": "gpt-4o-mini",
     "provider": "openai",
@@ -20,11 +20,12 @@
     ]
   },
   "runtime": {
-    "elapsed_s": 50.76,
+    "elapsed_s": 39.03,
     "workers": 6,
     "cases": 50,
     "outputs_written": 50,
     "hard_gate_failures": 0,
+    "requests_rejected": 0,
     "llm_enabled": true
   },
   "agents": {
@@ -76,7 +77,7 @@
       "uses_llm": true
     },
     "verifier_agent": {
-      "role": "Validate schema, array caps, null handling and evidence IDs against the CSVs",
+      "role": "Gate the incoming request, then validate schema, caps, nulls and evidence IDs",
       "scopes": [
         "items",
         "orders",
@@ -107,10 +108,11 @@
     "calls": 150,
     "failed_calls": 0,
     "prompt_tokens": 78381,
-    "completion_tokens": 5835,
-    "total_tokens": 84216
+    "completion_tokens": 5764,
+    "total_tokens": 84145
   },
   "results": {
+    "rejected_requests": [],
     "primary_issue_distribution": {
       "canceled_order_paid": 8,
       "late_delivery_logistics": 10,
@@ -163,13 +165,13 @@
   },
   "trace": {
     "path": "logging/trace.jsonl",
-    "lines": 1088,
+    "lines": 1188,
     "events": {
       "run_start": 1,
       "case_start": 50,
-      "handoff": 400,
+      "handoff": 450,
+      "report": 450,
       "llm_call": 150,
-      "report": 400,
       "case_end": 50,
       "critic_findings": 36,
       "run_end": 1

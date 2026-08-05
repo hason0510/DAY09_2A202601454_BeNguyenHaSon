@@ -139,9 +139,12 @@ def main() -> int:
         outcomes = [coordinator.run_case(case) for case in cases]
 
     outcomes.sort(key=lambda o: o.case_id)
-    written, failed = 0, []
+    written, failed, rejected = 0, [], []
     issues: Counter[str] = Counter()
     for outcome in outcomes:
+        if outcome.document is None:
+            # Gated at the door: the request itself was not acceptable.
+            rejected.append((outcome.case_id, outcome.errors or ["no document produced"]))
         if outcome.document is None or outcome.errors:
             failed.append((outcome.case_id, outcome.errors or ["no document produced"]))
         if outcome.document is not None:
@@ -188,6 +191,7 @@ def main() -> int:
             "cases": len(outcomes),
             "outputs_written": written,
             "hard_gate_failures": len(failed),
+            "requests_rejected": len(rejected),
             "llm_enabled": llm.enabled,
         },
         "agents": bus.roster,
@@ -201,6 +205,7 @@ def main() -> int:
         },
         "llm_usage": llm.usage,
         "results": {
+            "rejected_requests": [c for c, _ in rejected],
             "primary_issue_distribution": dict(sorted(issues.items())),
             "adjudicator_disagreements": disagreements,
             "cases_with_critic_findings": critiqued,
@@ -221,6 +226,10 @@ def main() -> int:
     print(f"  adjudicator disagreements : {len(disagreements)} {disagreements or ''}")
     print(f"  critic findings on cases  : {len(critiqued)} {critiqued or ''}")
     print(f"  repaired cases            : {len(repaired)} {repaired or ''}")
+    if rejected:
+        print(f"  ! REQUESTS REJECTED AT THE INPUT GATE ({len(rejected)}):")
+        for case_id, errs in rejected:
+            print(f"      {case_id}: {errs[:2]}")
     if failed:
         print(f"  ! SCHEMA FAILURES ({len(failed)}):")
         for case_id, errs in failed:

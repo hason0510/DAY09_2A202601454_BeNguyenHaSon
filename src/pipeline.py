@@ -30,7 +30,7 @@ from typing import Any
 from .a2a.bus import Bus
 from .a2a.message import Message
 from .assembler import build_document, repair
-from .config import MAX_REPAIR_ROUNDS
+from .config import MAX_REPAIR_ROUNDS, POLICY_VERSION
 from .policy import rules
 
 COORDINATOR = "coordinator"
@@ -79,6 +79,32 @@ class Coordinator:
             policy_version=case.get("policy_version"),
         )
 
+        # -- 0. gate the request ------------------------------------------
+        # Nothing downstream runs on an input we have not accepted.
+        gate = self._ask(
+            case_id, "verifier_agent", "validate_request",
+            {"case": case, "policy_version": POLICY_VERSION},
+        )
+        request_errors = gate["facts"].get("errors", [])
+        if request_errors:
+            self._tracer.emit("request_rejected", case_id=case_id, errors=request_errors)
+            return CaseOutcome(
+                case_id=case_id, document=None, errors=request_errors,
+                notes=[f"request rejected: {e}" for e in request_errors], degraded=True,
+            )
+
+        # The scope flags are instructions, not decoration: an investigation we
+        # were told not to run must not show up in the answer.
+        scope = case.get("investigation_scope") or {}
+        include_history = scope.get("include_customer_history", True)
+        include_products = scope.get("include_product_context", True)
+        if not (include_history and include_products):
+            self._tracer.emit(
+                "scope_restricted", case_id=case_id,
+                include_customer_history=include_history,
+                include_product_context=include_products,
+            )
+
         # -- 1. read the complaint ----------------------------------------
         intake = self._ask(
             case_id, "intake_agent", "parse_claim",
@@ -114,6 +140,7 @@ class Coordinator:
             notes.extend(report["notes"])
 
         facts = self._merge(order_id, customer, order_product, delivery, payment)
+        self._apply_scope(facts, include_history, include_products, notes)
 
         # -- 4. policy: deterministic verdict + independent LLM opinion ----
         policy = self._ask(case_id, "policy_agent", "apply_policy", {"facts": facts})
@@ -182,6 +209,26 @@ class Coordinator:
             primary_issue=verdict["primary_issue"], adjudicator_agrees=agrees,
             critic_findings=len(findings), repair_rounds=rounds, degraded=degraded,
         )
+
+    @staticmethod
+    def _apply_scope(
+        facts: dict, include_history: bool, include_products: bool, notes: list[str]
+    ) -> None:
+        """Honour investigation_scope on the fact sheet, before policy runs.
+
+        Applied here rather than at assembly time so the suppression is
+        consistent everywhere: if we were told not to look at customer history,
+        we must not emit related_order_ids AND must not claim repeat_customer,
+        because we did not establish it.
+        """
+        if not include_history:
+            facts["related_order_ids"] = []
+            facts["related_order_count"] = 0
+            notes.append("scope: customer history excluded by request")
+        if not include_products:
+            facts["product_ids_all"] = []
+            facts["category_names_all"] = []
+            notes.append("scope: product context excluded by request")
 
     @staticmethod
     def _merge(order_id, customer, order_product, delivery, payment) -> dict[str, Any]:

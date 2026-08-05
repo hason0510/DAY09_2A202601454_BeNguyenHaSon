@@ -15,10 +15,25 @@ from .base import Agent
 
 class VerifierAgent(Agent):
     name = "verifier_agent"
-    role = "Validate schema, array caps, null handling and evidence IDs against the CSVs"
+    role = "Gate the incoming request, then validate schema, caps, nulls and evidence IDs"
     capabilities = frozenset({"orders", "items", "payments", "sellers"})
 
     def handle(self, message: Message, view: DataView) -> AgentReport:
+        # Two intents: gate the request on the way in, gate the document on the
+        # way out. Same agent because both are "check it against the CSVs".
+        if message.intent == "validate_request":
+            problems = schema.validate_request(
+                message.payload["case"],
+                expected_case_id=message.case_id,
+                expected_policy_version=message.payload["policy_version"],
+                order_exists=lambda oid: view.order(oid) is not None,
+            )
+            return AgentReport(
+                facts={"errors": problems, "passed": not problems},
+                notes=(["request accepted"] if not problems else problems[:5]),
+                degraded=bool(problems),
+            )
+
         doc = message.payload["draft"]
         case_id = message.case_id
         order_id = message.payload["order_id"]

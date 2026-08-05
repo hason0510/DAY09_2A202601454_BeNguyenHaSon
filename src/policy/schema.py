@@ -97,6 +97,57 @@ def _round2(value: Any) -> Any:
     return round(value, 2) if _is_num(value) else value
 
 
+def validate_request(
+    case: dict,
+    *,
+    expected_case_id: str,
+    expected_policy_version: str,
+    order_exists: Callable[[str], bool],
+) -> list[str]:
+    """Gate the INPUT before any agent touches it.
+
+    An earlier revision only gated the output, which meant a malformed request
+    -- an unknown order, a policy version we do not implement, a case_id that
+    disagrees with its filename -- would flow through the whole pipeline and
+    come out as a confident-looking document. Rejecting at the door is the
+    difference between "no answer" and "a wrong answer that looks right".
+    """
+    problems: list[str] = []
+
+    if case.get("case_id") != expected_case_id:
+        problems.append(f"case_id {case.get('case_id')!r} does not match filename {expected_case_id}")
+
+    version = case.get("policy_version")
+    if version != expected_policy_version:
+        problems.append(
+            f"policy_version {version!r} is not {expected_policy_version} -- "
+            "this pipeline implements no other rule set"
+        )
+
+    request = case.get("customer_request")
+    if not isinstance(request, dict):
+        problems.append("customer_request is missing or not an object")
+        return problems
+
+    order_id = request.get("claimed_order_id")
+    if not isinstance(order_id, str) or not order_id:
+        problems.append("claimed_order_id is missing or empty")
+    elif not ID_RE.match(order_id):
+        problems.append(f"claimed_order_id {order_id!r} is not a 32-char Olist id")
+    elif not order_exists(order_id):
+        problems.append(f"claimed_order_id {order_id} does not exist in orders.csv")
+
+    scope = case.get("investigation_scope", {})
+    if not isinstance(scope, dict):
+        problems.append("investigation_scope is not an object")
+    else:
+        for flag in ("include_customer_history", "include_product_context"):
+            if flag in scope and not isinstance(scope[flag], bool):
+                problems.append(f"investigation_scope.{flag} must be a boolean")
+
+    return problems
+
+
 def validate(
     doc: dict,
     *,
