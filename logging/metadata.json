@@ -1,0 +1,172 @@
+{
+  "run_id": "run_20260805_152435",
+  "generated_at": "2026-08-05T15:25:10",
+  "model": {
+    "name": "gpt-4o-mini",
+    "provider": "openai",
+    "parameter_size": "not publicly disclosed by OpenAI (widely estimated ~8B)",
+    "temperature": 0.0,
+    "seed": 7,
+    "max_output_tokens": 700,
+    "response_format": "json_object"
+  },
+  "framework": {
+    "orchestration": "custom A2A message bus (src/a2a) - no agent framework dependency",
+    "llm_sdk": "openai-python 2.48.0",
+    "language": "python 3.13.7",
+    "dependencies": [
+      "openai",
+      "python-dotenv"
+    ]
+  },
+  "runtime": {
+    "elapsed_s": 35.07,
+    "workers": 6,
+    "cases": 50,
+    "outputs_written": 50,
+    "hard_gate_failures": 0,
+    "llm_enabled": true
+  },
+  "agents": {
+    "intake_agent": {
+      "role": "Parse the customer complaint into a structured claim (LLM)",
+      "scopes": [],
+      "uses_llm": true
+    },
+    "customer_agent": {
+      "role": "Resolve customer identity and prior order history",
+      "scopes": [
+        "customers",
+        "orders"
+      ],
+      "uses_llm": false
+    },
+    "order_product_agent": {
+      "role": "Order status, item rows, sellers, products and categories",
+      "scopes": [
+        "items",
+        "orders",
+        "products"
+      ],
+      "uses_llm": false
+    },
+    "payment_agent": {
+      "role": "Aggregate payment rows and reconcile against items + freight",
+      "scopes": [
+        "payments"
+      ],
+      "uses_llm": false
+    },
+    "delivery_agent": {
+      "role": "Delivery variance and per-seller handoff variance",
+      "scopes": [
+        "items",
+        "orders"
+      ],
+      "uses_llm": false
+    },
+    "policy_agent": {
+      "role": "Apply EC_POLICY_V2 (rule engine, authoritative) and cross-check with an LLM adjudicator",
+      "scopes": [],
+      "uses_llm": true
+    },
+    "critic_agent": {
+      "role": "Attack the draft resolution for contradictions against the facts (LLM)",
+      "scopes": [],
+      "uses_llm": true
+    },
+    "verifier_agent": {
+      "role": "Validate schema, array caps, null handling and evidence IDs against the CSVs",
+      "scopes": [
+        "items",
+        "orders",
+        "payments",
+        "sellers"
+      ],
+      "uses_llm": false
+    }
+  },
+  "dataset": {
+    "source": "Brazilian E-Commerce Public Dataset by Olist",
+    "orders": 99441,
+    "orders_with_items": 98666,
+    "orders_with_payments": 99440,
+    "customers": 99441,
+    "products": 32951,
+    "sellers": 3095
+  },
+  "policy_version": "EC_POLICY_V2",
+  "llm_usage": {
+    "enabled": true,
+    "calls": 150,
+    "failed_calls": 0,
+    "prompt_tokens": 78381,
+    "completion_tokens": 5739,
+    "total_tokens": 84120
+  },
+  "results": {
+    "primary_issue_distribution": {
+      "canceled_order_paid": 8,
+      "late_delivery_logistics": 10,
+      "late_delivery_seller": 10,
+      "unavailable_order_paid": 6,
+      "unsupported_late_claim": 8,
+      "valid_split_payment": 8
+    },
+    "adjudicator_disagreements": [],
+    "cases_with_critic_findings": [
+      "EC_001",
+      "EC_002",
+      "EC_003",
+      "EC_005",
+      "EC_006",
+      "EC_007",
+      "EC_008",
+      "EC_010",
+      "EC_013",
+      "EC_014",
+      "EC_015",
+      "EC_016",
+      "EC_017",
+      "EC_018",
+      "EC_019",
+      "EC_020",
+      "EC_021",
+      "EC_022",
+      "EC_023",
+      "EC_025",
+      "EC_027",
+      "EC_029",
+      "EC_032",
+      "EC_036",
+      "EC_037",
+      "EC_038",
+      "EC_039",
+      "EC_040",
+      "EC_041",
+      "EC_042",
+      "EC_044",
+      "EC_045",
+      "EC_046",
+      "EC_048",
+      "EC_049",
+      "EC_050"
+    ],
+    "cases_repaired": [],
+    "failed_cases": []
+  },
+  "trace": {
+    "path": "logging/trace.jsonl",
+    "lines": 1088,
+    "events": {
+      "run_start": 1,
+      "case_start": 50,
+      "handoff": 400,
+      "llm_call": 150,
+      "report": 400,
+      "case_end": 50,
+      "critic_findings": 36,
+      "run_end": 1
+    }
+  }
+}

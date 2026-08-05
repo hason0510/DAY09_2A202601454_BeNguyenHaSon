@@ -1,0 +1,20 @@
+# --- secrets: NEVER commit ---
+.env
+.env.*
+!.env.example
+*.key
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# --- ide ---
+.idea/
+.vscode/
+
+# --- build artifacts ---
+input.zip
+output.zip
