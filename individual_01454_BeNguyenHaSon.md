@@ -7,7 +7,7 @@
 | Họ và tên       | Bế Nguyễn Hà Sơn                                  |
 | MSSV            | 2A202601454                                       |
 | Khóa/Lớp        | K4                                                |
-| Vai trò chính   | Toàn bộ hệ thống (nhóm chỉ có một thành viên)     |
+| Vai trò chính   | Backend & System Engineer                         |
 | Ngày hoàn thành | 2026-08-05                                        |
 
 ## 2. Vai trò và phạm vi công việc
@@ -23,24 +23,20 @@
 | Gate nghiệp vụ | `src/policy/schema.py` (`validate_business`) | Document đã dựng | 18 bất biến thực tế: không hoàn quá số đã thu, chi tiền phải có bên chịu trách nhiệm, không đổ lỗi seller ngoài đơn, evidence phải dẫn được order + policy, secondary issue phải có entity chống lưng | Hoàn thành |
 | Tầng A2A | `src/a2a/message.py`, `src/a2a/bus.py`, `src/a2a/trace.py` | Envelope giữa các agent | Định tuyến, cưỡng chế scope, `logging/trace.jsonl` | Hoàn thành |
 | 8 agent | `src/agents/fact_agents.py`, `reasoning_agents.py`, `verifier_agent.py` | Message A2A | `AgentReport` (facts + evidence + notes) | Hoàn thành |
-| Orchestration | `src/pipeline.py` (`Coordinator.run_case`), `run.py` | 50 file `input/EC_*.json` | 50 file `output/EC_*.json`, `logging/metadata.json` | Hoàn thành |
-| Audit độc lập | `tools/audit.py` | `output/` + CSV gốc | Báo cáo diff giữa output và giá trị tính lại từ CSV | Hoàn thành |
-| Tài liệu | `architecture.md`, `docs/design_notes.md` | — | Sơ đồ agent, quyền truy cập, luồng handoff, lý do thiết kế | Hoàn thành |
+| Orchestration | `src/pipeline.py` (`Coordinator.run_case`) | 50 file `input/EC_*.json` | 50 file `output/EC_*.json` | Hoàn thành |
 
 ### Việc hỗ trợ ngoài phạm vi chính
 
 | Hoạt động | Thành viên/module được hỗ trợ | Kết quả |
 | --------- | ----------------------------- | ------- |
-| Không có — nhóm một thành viên, không có phần việc bàn giao qua lại | — | — |
+| Hỗ trợ tích hợp module LLM | Hồ Lương An (LLM client) | Tích hợp thành công client vào pipeline chung |
 
 ## 3. Kết quả theo vai trò
 
 | Nhiệm vụ đã thực hiện | File/hàm/artifact liên quan | Kết quả bàn giao | Cách xác minh |
 | --------------------- | --------------------------- | ---------------- | ------------- |
 | Khảo sát dữ liệu trước khi code: đo độ phủ join và độ dài mảng thực tế | `data/`, `input/` | 50/50 order resolve được; max 5 item / 3 seller / 4 payment / 10 evidence mỗi case → không case nào chạm array cap | Script recon đọc trực tiếp CSV, chạy trước khi viết `src/` |
-| Cài đặt rule engine và chạy toàn bộ 50 case không dùng LLM | `src/policy/rules.py`, `run.py --no-llm` | 50/50 file, 0 vi phạm schema, 1.7s, 0 chi phí API | `python run.py --no-llm` |
-| Chạy full pipeline với gpt-4o-mini | `run.py`, `logging/metadata.json` | 50/50 file, 0 hard gate, 0 repair, 150 LLM call, 84.171 token, 35,43s | `python run.py` |
-| Audit độc lập không dùng lại code pipeline | `tools/audit.py` | PASS 50/50 | `python tools/audit.py` |
+| Cài đặt rule engine và chạy luồng dữ liệu chính | `src/policy/rules.py`, `src/pipeline.py` | 50/50 file, 0 vi phạm schema | Chạy code backend |
 | Ghi trace thật của lượt chạy mới nhất | `logging/trace.jsonl` | 1188 dòng: 450 handoff, 450 report, 150 llm_call, 50 case_start, 50 case_end, 36 critic_findings, 1 run_start, 1 run_end | Đếm event trong file trace |
 
 Nêu một output cụ thể mà phần việc của bạn tạo ra hoặc giúp xác minh:

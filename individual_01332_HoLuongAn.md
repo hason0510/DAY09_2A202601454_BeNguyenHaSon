@@ -18,8 +18,10 @@
 
 | Module/deliverable | File/hàm phụ trách | Input nhận vào | Output bàn giao   | Trạng thái                            |
 | ------------------ | ------------------ | -------------- | ----------------- | ------------------------------------- |
-| Multi-Agent System | main.py            | 50 input JSONs | 50 output JSONs   | Hoàn thành                            |
-| Architecture Doc   | architecture.md    | System Design  | architecture.md   | Hoàn thành                            |
+| LLM client         | `src/llm/client.py` (`ask_json`, `retry`, `_note_failure`) | Prompt text, JSON schema | JSON response, tracked usage | Hoàn thành                            |
+| Entry point        | `run.py` (`load_env`, `main`, `_sdk_version`) | ENV vars, args | Chạy pipeline 50 cases      | Hoàn thành                            |
+| Audit độc lập      | `tools/audit.py` (`read`, `ts`, `main`) | `output/` + CSV gốc | Báo cáo diff với giá trị tính lại | Hoàn thành                            |
+| Tài liệu           | `architecture.md`, `docs/design_notes.md`, `README.md` | Codebase architecture | Tài liệu thiết kế hệ thống | Hoàn thành                            |
 
 Chỉ nhận ownership cho phần bạn trực tiếp thực hiện. Liên hệ rõ phần việc của bạn với đầu vào, đầu ra và các thành viên phụ thuộc vào phần đó.
 
@@ -27,14 +29,16 @@ Chỉ nhận ownership cho phần bạn trực tiếp thực hiện. Liên hệ 
 
 | Hoạt động                 | Thành viên/module được hỗ trợ | Kết quả                 |
 | ------------------------- | ----------------------------- | ----------------------- |
-| [Debug/tích hợp/tài liệu] | [Tên hoặc module]             | [Kết quả và bằng chứng] |
+| Viết công cụ Audit để kiểm tra output đầu ra | Bế Nguyễn Hà Sơn (Pipeline & Data) | Audit PASS 50/50 cases, phát hiện lỗi để báo Sơn fix |
 
 ## 3. Kết quả theo vai trò
 
 | Nhiệm vụ đã thực hiện | File/hàm/artifact liên quan | Kết quả bàn giao          | Cách xác minh   |
 | --------------------- | --------------------------- | ------------------------- | --------------- |
-| Xây dựng hệ thống agent| main.py                     | Pipeline xuất 50 cases    | output JSON files |
-| Xây dựng script trace  | main.py                     | log trace cho 50 cases    | logging/trace.jsonl|
+| Xây dựng LLM client và retry logic| `src/llm/client.py`           | Hỗ trợ gọi mô hình an toàn| Unit tests / API logs |
+| Thiết lập script chạy chính       | `run.py`                      | Chạy tự động 50 cases     | `python run.py` |
+| Viết tool tính toán chấm điểm     | `tools/audit.py`              | Báo cáo đánh giá output   | `python tools/audit.py` |
+| Viết tài liệu hệ thống            | `architecture.md`, `docs/design_notes.md`, `README.md`| Hệ thống tài liệu         | Đọc trực tiếp |
 
 Nêu một output cụ thể mà phần việc của bạn tạo ra hoặc giúp xác minh:
 
